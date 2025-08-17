@@ -51,9 +51,10 @@ class ApiClient {
       throw new Error("No response from server");
     }
 
-    // ✅ Handle 204 No Content safely
+    // ✅ Fix: type-safe handling for 204 No Content
     if (response.status === 204) {
-      return null as unknown as T; // <-- type assertion fixes the error
+      // Tell TS that T can be null
+      return null as unknown as T;
     }
 
     let data: any;
@@ -128,10 +129,13 @@ class ApiClient {
     page?: number;
     pageSize?: number;
   }) {
-    const queryString = new URLSearchParams(
-      (params || {}) as Record<string, string>
-    ).toString();
-    return this.request(`/jobs${queryString ? `?${queryString}` : ""}`);
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) query.append(key, String(value));
+      });
+    }
+    return this.request(`/jobs${query.toString() ? `?${query}` : ""}`);
   }
 
   async getMyJobs() {
@@ -183,12 +187,13 @@ class ApiClient {
   }
 
   async getMyApplications(params?: { page?: number; pageSize?: number }) {
-    const queryString = new URLSearchParams(
-      (params || {}) as Record<string, string>
-    ).toString();
-    return this.request(
-      `/applications/me${queryString ? `?${queryString}` : ""}`
-    );
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) query.append(key, String(value));
+      });
+    }
+    return this.request(`/applications/me${query.toString() ? `?${query}` : ""}`);
   }
 
   async getApplication(id: string) {
