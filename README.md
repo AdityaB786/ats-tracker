@@ -152,3 +152,10 @@ Visit [http://localhost:3000](http://localhost:3000).
 ## **Demo Video**
 
 * https://drive.google.com/file/d/1MZ__tTQYkhNkp5lI5Npd3I2gQekqBhiZ/view?usp=drive_link
+
+
+
+## **Further Improvements:
+*
+I developed an automated job notifier using Playwright, n8n, and webhooks. The system runs on a scheduled cron job, scrapes the latest job postings from Superset, and delivers real-time Telegram alerts to JIIT students through n8n. This creates a zero-touch, low-code workflow for automated placement updates.
+The same solution can be integrated into the Internifyy app, ensuring that whenever a recruiter posts a new opportunity, all registered candidates receive instant notifications — helping candidates apply faster and enabling recruiters to reach more applicants efficiently.
