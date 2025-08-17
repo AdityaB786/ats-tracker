@@ -12,7 +12,7 @@ router.get('/debug', async (req: Request, res: Response): Promise<void> => {
   try {
     const jobs = await Job.find().select('title recruiterId createdAt');
     const count = await Job.countDocuments();
-    res.json({ 
+    res.json({
       totalJobs: count,
       jobs: jobs.map(j => ({
         id: j._id,
@@ -32,7 +32,7 @@ router.get('/my-jobs', authGuard, authorize('recruiter'), async (req: AuthReques
     console.log('Fetching jobs for recruiter:', req.user?.id);
     const jobs = await Job.find({ recruiterId: req.user?.id })
       .sort({ createdAt: -1 });
-    
+
     console.log('Found jobs:', jobs.length);
     res.json({ items: jobs });
   } catch (error) {
@@ -45,9 +45,9 @@ router.get('/my-jobs', authGuard, authorize('recruiter'), async (req: AuthReques
 router.post('/', authGuard, authorize('recruiter'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const validatedData = createJobSchema.parse(req.body);
-    
+
     console.log('Creating job with recruiterId:', req.user?.id);
-    
+
     const job = new Job({
       ...validatedData,
       deadline: new Date(validatedData.deadline),
@@ -69,22 +69,24 @@ router.post('/', authGuard, authorize('recruiter'), async (req: AuthRequest, res
 // Get all jobs with search, filters, and pagination
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { q, location, sort = 'createdAt:desc', page = '1', pageSize = '10' } = jobQuerySchema.parse(req.query);
-    
+    const parsed = jobQuerySchema.parse(req.query);
+
+    const { q, location, sort = 'createdAt:desc', page = '1', pageSize = '10' } = parsed;
+
     const pageNum = typeof page === 'number' ? page : parseInt(page, 10);
     const size = typeof pageSize === 'number' ? pageSize : parseInt(pageSize, 10);
     const skip = (pageNum - 1) * size;
 
     // Build query
     const query: any = {};
-    
+
     if (q) {
       query.$or = [
         { title: { $regex: q, $options: 'i' } },
         { description: { $regex: q, $options: 'i' } }
       ];
     }
-    
+
     if (location) {
       query.location = { $regex: location, $options: 'i' };
     }
@@ -120,6 +122,116 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// ... rest of your routes unchanged (/:id, patch, delete, applications, etc.)
+// Get single job (public endpoint)
+router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const job = await Job.findById(req.params.id)
+      .populate('recruiterId', 'name email');
+
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    res.json({ job });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch job' });
+  }
+});
+
+// Update job (recruiter only, must own the job)
+router.patch('/:id', authGuard, authorize('recruiter'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const validatedData = updateJobSchema.parse(req.body);
+
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    if (job.recruiterId.toString() !== req.user?.id) {
+      res.status(403).json({ error: 'You can only update your own jobs' });
+      return;
+    }
+
+    Object.assign(job, validatedData);
+    if (validatedData.deadline) {
+      job.deadline = new Date(validatedData.deadline);
+    }
+
+    await job.save();
+    res.json({ job });
+  } catch (error: any) {
+    if (error.name === 'ZodError') {
+      res.status(400).json({ error: 'Validation error', details: error.errors });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to update job' });
+  }
+});
+
+// Delete job (recruiter only, must own the job)
+router.delete('/:id', authGuard, authorize('recruiter'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    if (job.recruiterId.toString() !== req.user?.id) {
+      res.status(403).json({ error: 'You can only delete your own jobs' });
+      return;
+    }
+
+    // Delete job and related applications
+    await Promise.all([
+      Job.findByIdAndDelete(req.params.id),
+      Application.deleteMany({ jobId: req.params.id })
+    ]);
+
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete job' });
+  }
+});
+
+// Get applications for a job (recruiter only, must own the job)
+router.get('/:id/applications', authGuard, authorize('recruiter'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const job = await Job.findById(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    if (job.recruiterId.toString() !== req.user?.id) {
+      res.status(403).json({ error: 'You can only view applications for your own jobs' });
+      return;
+    }
+
+    const applications = await Application.find({ jobId: req.params.id })
+      .populate('applicantId', 'name email')
+      .sort({ createdAt: -1 });
+
+    // Group by status for Kanban board
+    const byStatus = {
+      APPLIED: [] as any[],
+      UNDER_REVIEW: [] as any[],
+      INTERVIEW: [] as any[],
+      OFFER: [] as any[],
+      REJECTED: [] as any[]
+    };
+
+    applications.forEach(app => {
+      byStatus[app.status].push(app);
+    });
+
+    res.json({ byStatus });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
 
 export default router;
