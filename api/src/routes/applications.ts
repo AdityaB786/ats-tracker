@@ -1,10 +1,10 @@
 import { Router, Request, Response } from "express";
+import mongoose from "mongoose";
 import Application from "../models/Application";
 import Job from "../models/Job";
 import { AuthRequest } from "../types";
 import { authGuard, authorize } from "../middleware/auth";
 import { uploadResume } from "../middleware/upload";
-import mongoose from "mongoose";
 
 import {
   createApplicationSchema,
@@ -36,7 +36,7 @@ router.get("/count", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// Create application (applicant only) with file upload
+// Create application
 router.post(
   "/",
   authGuard,
@@ -54,7 +54,6 @@ router.post(
         coverLetter,
       } = req.body;
 
-      // Validate required fields
       if (
         !jobId ||
         !applicantName ||
@@ -66,30 +65,25 @@ router.post(
         return;
       }
 
-      // Check if job exists and is still accepting applications
       const job = await Job.findById(jobId);
       if (!job) {
         res.status(404).json({ error: "Job not found" });
         return;
       }
-
       if (new Date() > job.deadline) {
         res.status(400).json({ error: "Job application deadline has passed" });
         return;
       }
 
-      // Check if already applied
       const existingApplication = await Application.findOne({
-        jobId: jobId,
+        jobId,
         applicantId: req.user?.id,
       });
-
       if (existingApplication) {
         res.status(409).json({ error: "You have already applied to this job" });
         return;
       }
 
-      // Prepare application data
       const applicationData: any = {
         jobId,
         applicantId: req.user?.id,
@@ -102,38 +96,21 @@ router.post(
         status: "APPLIED",
       };
 
-      console.log("Creating application with data:", {
-        jobId,
-        applicantId: req.user?.id,
-        applicantName,
-        applicantEmail,
-        applicantPhone,
-        yearsOfExperience,
-        currentRole,
-        hasResume: !!req.file,
-      });
-
-      // Handle file upload
       if (req.file) {
         applicationData.resumeData = req.file.buffer.toString("base64");
         applicationData.resumeFileName = req.file.originalname;
       }
 
-      // Create application
       const application = new Application(applicationData);
       await application.save();
-      console.log("Application saved successfully:", application._id);
 
-      // Populate without resumeData
-      await (application as any).populate([
-        { path: 'jobId', select: 'title location' },
-        { path: 'applicantId', select: 'name email' }
+      await application.populate([
+        { path: "jobId", select: "title location" },
+        { path: "applicantId", select: "name email" },
       ]);
-      
 
       res.status(201).json({ application });
     } catch (error: any) {
-      console.error("Application error:", error);
       if (error.code === 11000) {
         res.status(409).json({ error: "You have already applied to this job" });
         return;
@@ -145,7 +122,7 @@ router.post(
   }
 );
 
-// Get my applications (applicant only)
+// Get my applications
 router.get(
   "/me",
   authGuard,
@@ -203,23 +180,18 @@ router.get(
         return;
       }
 
-      // Check authorization - applicant can see own, recruiter can see if owns the job
-      if (req.user?.role === 'applicant' && application.applicantId instanceof ObjectId) {
+      // Fix: just compare ObjectIds with toString
+      if (req.user?.role === "applicant") {
         if (application.applicantId.toString() !== req.user.id) {
-          res.status(403).json({ error: 'You can only view your own applications' });
+          res.status(403).json({ error: "You can only view your own applications" });
           return;
         }
       }
-      
 
       if (req.user?.role === "recruiter") {
         const job = await Job.findById(application.jobId);
         if (job?.recruiterId.toString() !== req.user.id) {
-          res
-            .status(403)
-            .json({
-              error: "You can only view applications for your own jobs",
-            });
+          res.status(403).json({ error: "You can only view applications for your own jobs" });
           return;
         }
       }
@@ -231,7 +203,7 @@ router.get(
   }
 );
 
-// Update application (recruiter only, must own the job)
+// Update application
 router.patch(
   "/:id",
   authGuard,
@@ -246,18 +218,12 @@ router.patch(
         return;
       }
 
-      // Check if recruiter owns the job
       const job = await Job.findById(application.jobId);
       if (!job || job.recruiterId.toString() !== req.user?.id) {
-        res
-          .status(403)
-          .json({
-            error: "You can only update applications for your own jobs",
-          });
+        res.status(403).json({ error: "You can only update applications for your own jobs" });
         return;
       }
 
-      // Update application
       if (validatedData.status) application.status = validatedData.status;
       if (validatedData.notes !== undefined)
         application.notes = validatedData.notes;
@@ -278,77 +244,60 @@ router.patch(
   }
 );
 
-// Download resume (recruiter only or applicant owner)
-router.get(
-  "/:id/resume",
-  async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-      // Get token from query parameter or authorization header
-      const token =
-        (req.query.token as string) || req.headers.authorization?.split(" ")[1];
+// Download resume
+router.get("/:id/resume", async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const token = (req.query.token as string) || req.headers.authorization?.split(" ")[1];
 
-      if (!token) {
-        res.status(401).json({ error: "No token provided" });
-        return;
-      }
-
-      // Verify token
-      let user;
-      try {
-        const { verifyToken } = require("../utils/auth");
-        const decoded = verifyToken(token);
-        user = { id: decoded.sub, role: decoded.role };
-      } catch (error) {
-        res.status(401).json({ error: "Invalid token" });
-        return;
-      }
-
-      const application = await Application.findById(req.params.id)
-        .select("+resumeData resumeFileName")
-        .populate("jobId");
-
-      if (!application) {
-        res.status(404).json({ error: "Application not found" });
-        return;
-      }
-
-      // Check authorization
-      if (
-        user.role === "applicant" &&
-        application.applicantId.toString() !== user.id
-      ) {
-        res.status(403).json({ error: "You can only view your own resume" });
-        return;
-      }
-
-      if (user.role === "recruiter") {
-        const job = await Job.findById(application.jobId);
-        if (!job || job.recruiterId.toString() !== user.id) {
-          res
-            .status(403)
-            .json({ error: "You can only view resumes for your own jobs" });
-          return;
-        }
-      }
-
-      if (!application.resumeData || !application.resumeFileName) {
-        res.status(404).json({ error: "No resume found for this application" });
-        return;
-      }
-
-      // Set headers for file download
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${application.resumeFileName}"`
-      );
-      // Convert base64 back to Buffer for download
-      const buffer = Buffer.from(application.resumeData, "base64");
-      res.send(buffer);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to download resume" });
+    if (!token) {
+      res.status(401).json({ error: "No token provided" });
+      return;
     }
+
+    let user;
+    try {
+      const { verifyToken } = require("../utils/auth");
+      const decoded = verifyToken(token);
+      user = { id: decoded.sub, role: decoded.role };
+    } catch {
+      res.status(401).json({ error: "Invalid token" });
+      return;
+    }
+
+    const application = await Application.findById(req.params.id)
+      .select("+resumeData resumeFileName")
+      .populate("jobId");
+
+    if (!application) {
+      res.status(404).json({ error: "Application not found" });
+      return;
+    }
+
+    if (user.role === "applicant" && application.applicantId.toString() !== user.id) {
+      res.status(403).json({ error: "You can only view your own resume" });
+      return;
+    }
+
+    if (user.role === "recruiter") {
+      const job = await Job.findById(application.jobId);
+      if (!job || job.recruiterId.toString() !== user.id) {
+        res.status(403).json({ error: "You can only view resumes for your own jobs" });
+        return;
+      }
+    }
+
+    if (!application.resumeData || !application.resumeFileName) {
+      res.status(404).json({ error: "No resume found for this application" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${application.resumeFileName}"`);
+    const buffer = Buffer.from(application.resumeData, "base64");
+    res.send(buffer);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to download resume" });
   }
-);
+});
 
 export default router;
