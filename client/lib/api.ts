@@ -28,7 +28,7 @@ class ApiClient {
   ): Promise<T | null> {
     const url = `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
-
+  
     const config: RequestInit = {
       ...options,
       headers: {
@@ -38,38 +38,38 @@ class ApiClient {
       },
       credentials: "include",
     };
-
+  
     let response: Response;
-
+  
     try {
       response = await fetch(url, config);
     } catch (error: any) {
       throw new Error(error.message || "Network request failed");
     }
-
-    // ✅ Explicitly check response before using
+  
     if (!response) {
       throw new Error("No response from server");
     }
-
-    // ✅ Handle 204 No Content responses
+  
+    // ✅ Explicitly return null for 204
     if (response.status === 204) {
-      return null;
+      return null as T | null;
     }
-
+  
     let data: any;
     try {
       data = await response.json();
     } catch {
       throw new Error("Invalid JSON response");
     }
-
+  
     if (!response.ok) {
       throw new Error(data?.error || "Request failed");
     }
-
+  
     return data as T;
   }
+  
 
   // -------------------
   // Auth endpoints
