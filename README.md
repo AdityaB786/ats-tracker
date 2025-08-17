@@ -161,4 +161,3 @@ Visit [http://localhost:3000](http://localhost:3000).
 
 * Can be integrated into the **Internifyy app**, ensuring that whenever a recruiter posts a new opportunity, all registered candidates receive instant notifications — helping candidates apply faster and enabling recruiters to reach more applicants efficiently.
 
-```
