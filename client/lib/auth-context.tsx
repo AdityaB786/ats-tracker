@@ -30,8 +30,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     try {
       const response = await api.getMe();
-      setUser(response.user);
-    } catch (error) {
+      if (response && (response as any).user) {
+        setUser((response as any).user as User);
+      } else {
+        setUser(null);
+      }
+    } catch {
       setUser(null);
     }
   };
@@ -42,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         try {
           await refreshUser();
-        } catch (error) {
+        } catch {
           api.setToken(null);
         }
       }
@@ -54,14 +58,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await api.login(email, password);
-      setUser(response.user);
-      toast.success('Login successful!');
-      
-      // Redirect based on role
-      if (response.user.role === 'recruiter') {
-        router.push('/recruiter/jobs');
+      if (response) {
+        setUser(response.user as User);
+        toast.success('Login successful!');
+
+        // Redirect based on role
+        if (response.user.role === 'recruiter') {
+          router.push('/recruiter/jobs');
+        } else {
+          router.push('/dashboard');
+        }
       } else {
-        router.push('/dashboard');
+        throw new Error('Login failed: no response from server');
       }
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
@@ -91,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       toast.success('Logged out successfully');
       router.push('/');
-    } catch (error) {
+    } catch {
       // Clear user even if logout fails
       setUser(null);
       api.setToken(null);
