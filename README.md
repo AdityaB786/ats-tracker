@@ -1,7 +1,7 @@
 # Internifyy - Applicant Tracking & Job Management System
 
 Internifyy is a modern, full-stack platform for both **job applicants** and **recruiters**. Applicants can search and apply for jobs, while recruiters can post jobs, track applications via a drag-and-drop **Kanban board**, and visualize analytics with **Chart.js**.
-
+link: https://internifyy.vercel.app/
 ---
 
 ## **Features**
@@ -161,3 +161,4 @@ Visit [http://localhost:3000](http://localhost:3000).
 
 * Can be integrated into the **Internifyy app**, ensuring that whenever a recruiter posts a new opportunity, all registered candidates receive instant notifications — helping candidates apply faster and enabling recruiters to reach more applicants efficiently.
 
+* Candidate Profile Setup.
