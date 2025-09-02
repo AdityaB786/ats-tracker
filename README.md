@@ -152,7 +152,7 @@ Visit [http://localhost:3000](http://localhost:3000).
 
 ## **Demo Video**
 
-* [https://drive.google.com/file/d/1MZ\_\_tTQYkhNkp5lI5Npd3I2gQekqBhiZ/view?usp=drive\_link](https://drive.google.com/file/d/1MZ__tTQYkhNkp5lI5Npd3I2gQekqBhiZ/view?usp=drive_link)
+* [Demo Video](https://drive.google.com/file/d/1ci78K-JeJAxUHaJiLQe8ZrX6prGVCArq/view?usp=sharing)
 
 ---
 
